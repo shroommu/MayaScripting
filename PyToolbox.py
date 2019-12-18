@@ -108,7 +108,9 @@ class Toolbox():
         
         #RK system tools
         self.rkFrame = cmds.frameLayout(parent = self.child2, label = "IKFK System", collapsable = True, collapse = True)
-        cmds.button(parent = self.rkFrame, label = "Create Transform Control Attributes", command = lambda x: self.CreateIKFKAttributes(), ann = "Select your Transform control to run this command. Will create an IKFK attribute for two arms and two legs")
+        self.scrollList = cmds.textScrollList(parent = self.rkFrame)
+        cmds.button(parent = self.rkFrame, label = "Add", command = lambda x: self.AddToTextScrollList(self.scrollList))
+        cmds.button(parent = self.rkFrame, label = "Create Transform Control Attributes", command = lambda x: self.CreateIKFKAttributes(self.QueryTextScrollList(self.scrollList)), ann = "Select your Transform control to run this command. Will create an IKFK attribute for two arms and two legs")
 
         self.rkRC1 = cmds.rowColumnLayout(parent = self.rkFrame, numberOfColumns=2)
         cmds.text(parent = self.rkRC1, label = "Attribute Number", ann = "Check the order of the user-created attributes on Transform control to get this number")
@@ -122,7 +124,7 @@ class Toolbox():
         self.rkOptnMenu = cmds.optionMenu(parent = self.rkRC2)
         cmds.menuItem(parent = self.rkOptnMenu, label = "FK")
         cmds.menuItem(parent = self.rkOptnMenu, label = "IK")
-        cmds.button(parent = self.rkFrame, label = "Key Control Visibility", command = lambda x: self.RKCtrlSetDrivenKey(cmds.intField(self.rkAttrNum2, q = 1, v = 1), cmds.optionMenu(self.rkOptnMenu, q = 1, v = 1)) , ann = "Select Transform control first, then select the controls for one joint system (ie the left arm IK controls)")
+        cmds.button(parent = self.rkFrame, label = "Key Control Visibility", command = lambda x: self.RKCtrlSetDrivenKey(self.QueryTextScrollList(self.scrollList), cmds.intField(self.rkAttrNum2, q = 1, v = 1), cmds.optionMenu(self.rkOptnMenu, q = 1, v = 1)) , ann = "Select Transform control first, then select the controls for one joint system (ie the left arm IK controls)")
         
         cmds.separator(parent = self.child2, style = "double")
 
@@ -345,13 +347,19 @@ class Toolbox():
         cmds.setAttr (thisJoint + ".overrideColor", thisColor) 
 
     def SetControlColor (self, thisControl, thisColor):
-        print("setting control color")
+        #print("setting control color")
         cmds.setAttr (thisControl + ".overrideEnabled", 1)
         cmds.setAttr (thisControl + ".overrideColor", thisColor)
 
-
-    def CreateIKFKAttributes(self):
-        xformCtrl = cmds.ls(selection = 1)
+    def AddToTextScrollList(self, thisTSC):
+        cmds.textScrollList(thisTSC, edit = 1, append = cmds.ls(selection = 1))
+        
+    def QueryTextScrollList(self, thisTSC):
+        return cmds.textScrollList(thisTSC, q = 1, si = 1)
+        
+    def CreateIKFKAttributes(self, xformCtrl):
+        #xformCtrl = cmds.ls(selection = 1)
+        print(xformCtrl)
     
         cmds.addAttr (xformCtrl, longName = "Arm_L_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
         cmds.addAttr (xformCtrl, longName = "Arm_R_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
@@ -394,11 +402,11 @@ class Toolbox():
 
             cmds.setAttr((xformCtrl + "." + ctrlAttr), 0)
 
-    def RKCtrlSetDrivenKey(self, attrNum, controlType):
+    def RKCtrlSetDrivenKey(self, xformCtrl, attrNum, controlType):
         sels = cmds.ls(selection = 1)
 
-        xformCtrl = sels[0]
-        sels.remove(xformCtrl)
+        #xformCtrl = sels[0]
+        #sels.remove(xformCtrl)
         
         for var in range(0, len(sels)):
             ctrl = sels[var]

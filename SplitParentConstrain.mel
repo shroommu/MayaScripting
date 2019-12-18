@@ -1,0 +1,31 @@
+//Alexa Kruckenberg 11/4/2018
+//OC DO NOT STEAL
+
+//assign this script to a button on your shelf for easy access
+//to use, select your parent control, then select your child control, and run the script
+global proc SplitParentConstrain()
+{
+    string $sels[] = `ls -sl`;
+    
+    string $constrainerCtrl = $sels[0];
+    string $constraineeCtrl = $sels[1];
+    string $constraineeCtrlGrp[] = `listRelatives -parent $constraineeCtrl`;
+    
+    string $tConst[] = `parentConstraint -name ($constraineeCtrlGrp[0] + "_Translate_Constraint") -skipRotate x -skipRotate y -skipRotate z -maintainOffset $constrainerCtrl $constraineeCtrlGrp[0]`;
+    string $rConst[] = `parentConstraint -name ($constraineeCtrlGrp[0] + "_Rotate_Constraint") -skipTranslate x -skipTranslate y -skipTranslate z -maintainOffset $constrainerCtrl $constraineeCtrlGrp[0]`;
+
+    addAttr -longName "Translate_Constraint" -k 1 -at long -minValue 0 -maxValue 1 -defaultValue 1 $constraineeCtrl;
+    addAttr -longName "Rotate_Constraint" -k 1 -at long -minValue 0 -maxValue 1 -defaultValue 1 $constraineeCtrl;
+
+    string $attrs[] = `listAttr -userDefined $constraineeCtrl`;
+
+    string $tAttr = $attrs[0];
+    string $rAttr = $attrs[1];
+
+    print ($attrs);
+    
+    connectAttr -f ($constraineeCtrl + "." + $rAttr) ($rConst[0] + "." + $constrainerCtrl + "W0");
+    connectAttr -f ($constraineeCtrl + "." + $tAttr) ($tConst[0] + "." + $constrainerCtrl + "W0");
+}
+
+SplitParentConstrain();

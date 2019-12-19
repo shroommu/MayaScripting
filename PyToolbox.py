@@ -58,21 +58,21 @@ class Toolbox():
         cmds.separator(parent = self.child2, style = "double")
         
         #joint orient
-        self.jointOrientFrame = cmds.frameLayout(parent = self.child2, label = "OrientJoints", collapsable = True, collapse = True)
+        self.jointOrientFrame = cmds.frameLayout(parent = self.child2, label = "Orient Joints", collapsable = True, collapse = True)
         
-        cmds.text(parent = self.jointOrientFrame, label = "Primary Axis:")
-        self.primaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Primary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
+        self.primaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Primary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3, select = 1)
 
-        self.secondaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame,  label = "Secondary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
+        self.secondaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame,  label = "Secondary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3, select = 3)
 
-        self.SAORC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Secondary Axis World Orientation", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
-
+        self.SAORC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Secondary Axis World Orientation", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3, select = 1)
         
         self.upOrDown = cmds.optionMenu(parent = self.jointOrientFrame)
         cmds.menuItem(parent = self.upOrDown, label = "+")
         cmds.menuItem(parent = self.upOrDown, label = "-")
         
         cmds.button(parent = self.jointOrientFrame, label = "Orient Joints", command = lambda x: self.OrientJoints(self.QueryRadioButtonGrp(self.primaryAxisRC), self.QueryRadioButtonGrp(self.secondaryAxisRC), self.QueryRadioButtonGrp(self.SAORC), cmds.optionMenu(self.upOrDown, q = 1, value = 1), True, True, True))
+        
+        cmds.button(parent = self.jointOrientFrame, label = "Freeze Rotations", command = lambda x: self.FreezeRotation())
         
         cmds.separator(parent = self.child2, style = "double")
 
@@ -347,6 +347,12 @@ class Toolbox():
             else:
                 cmds.joint(sel, edit = 1, orientJoint = axisOrder, secondaryAxisOrient = secondaryAxisOrientation)
 
+
+    def FreezeRotation(self):
+        sels = cmds.ls(selection = 1)
+        
+        for sel in sels:
+            cmds.makeIdentity(sel, rotate = 1, apply = 1)
 
 
     def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint):

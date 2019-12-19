@@ -40,6 +40,7 @@ class Toolbox():
         #rigging tab
         self.child2 = cmds.rowColumnLayout(parent = self.tabs, numberOfColumns=1)
         
+        #locator creator
         self.createLocatorFrame = cmds.frameLayout(parent = self.child2, label = "Create Locators", collapsable = True, collapse = True)
         self.createLocatorRC = cmds.rowColumnLayout(parent = self.createLocatorFrame, numberOfColumns = 2)
         cmds.text(parent = self.createLocatorRC, label = "Type")
@@ -54,6 +55,25 @@ class Toolbox():
         self.createJointFrame = cmds.frameLayout(parent = self.child2, label = "Create Joints", collapsable = True, collapse = True)
         cmds.button(parent = self.createJointFrame, label = "Create Joints", command = lambda x: self.CreateJoints())
 
+        cmds.separator(parent = self.child2, style = "double")
+        
+        #joint orient
+        self.jointOrientFrame = cmds.frameLayout(parent = self.child2, label = "OrientJoints", collapsable = True, collapse = True)
+        
+        cmds.text(parent = self.jointOrientFrame, label = "Primary Axis:")
+        self.primaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Primary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
+
+        self.secondaryAxisRC = cmds.radioButtonGrp(parent = self.jointOrientFrame,  label = "Secondary Axis:", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
+
+        self.SAORC = cmds.radioButtonGrp(parent = self.jointOrientFrame, label = "Secondary Axis World Orientation", ad3 = 1, cw3 = [20, 20, 20], labelArray3 = ["X", "Y", "Z"], numberOfRadioButtons = 3)
+
+        
+        self.upOrDown = cmds.optionMenu(parent = self.jointOrientFrame)
+        cmds.menuItem(parent = self.upOrDown, label = "+")
+        cmds.menuItem(parent = self.upOrDown, label = "-")
+        
+        cmds.button(parent = self.jointOrientFrame, label = "Orient Joints", command = lambda x: self.OrientJoints(self.QueryRadioButtonGrp(self.primaryAxisRC), self.QueryRadioButtonGrp(self.secondaryAxisRC), self.QueryRadioButtonGrp(self.SAORC), cmds.optionMenu(self.upOrDown, q = 1, value = 1), True, True, True))
+        
         cmds.separator(parent = self.child2, style = "double")
 
         #control creator
@@ -259,6 +279,76 @@ class Toolbox():
             if var is not 0:
                 cmds.parent(joint, joints[var - 1])
 
+
+    def QueryRadioButtonGrp(self, radioGrp):
+        return cmds.radioButtonGrp(radioGrp, query = 1, select = 1)
+
+
+    def OrientJoints(self, primaryAxis, secondaryAxis, secondaryAxisOrientation, upOrDown, selectHierarchy, orientToWorld, zeroLastJoint):
+        
+        if primaryAxis == 1:
+            primaryAxis = "x"
+        elif primaryAxis == 2:
+            primaryAxis = "y"
+        else:
+            primaryAxis = "z"
+            
+        if secondaryAxis == 1:
+            secondaryAxis = "x"
+        elif secondaryAxis == 2:
+            secondaryAxis = "y"
+        else:
+            secondaryAxis = "z"
+            
+        if secondaryAxisOrientation == 1:
+            secondaryAxisOrientation = "x"
+        elif secondaryAxisOrientation == 2:
+            secondaryAxisOrientation = "y"
+        else:
+            secondaryAxisOrientation = "z"
+            
+        sels = None
+        
+        if(selectHierarchy == 1):
+            cmds.select(hierarchy = 1)
+            sels = cmds.ls(selection = 1)
+        else:
+            sels = cmds.ls(selection = 1)
+            
+        tertiaryAxis = None
+        
+        if (primaryAxis == "x" and secondaryAxis == "y") or (primaryAxis == "y" and secondaryAxis == "x"):
+            tertiaryAxis = "z"
+        elif (primaryAxis == "x" and secondaryAxis == "z") or (primaryAxis == "z" and secondaryAxis == "x"):
+            tertiaryAxis = "y"
+        elif (primaryAxis == "y" and secondaryAxis == "z") or (primaryAxis == "z" and secondaryAxis == "y"):
+            tertiaryAxis = "x"
+        else:
+            cmds.warning("Primary and secondary axes are the same")
+            
+        if upOrDown == "+":
+            upOrDown = "up"
+        else:
+            upOrDown = "down"
+            
+        secondaryAxisOrientation += upOrDown
+        
+        axisOrder = primaryAxis + secondaryAxis + tertiaryAxis
+        
+        print(axisOrder)
+        print(secondaryAxisOrientation)
+        
+        for sel in sels:
+            
+            if(cmds.listRelatives(sel, children = 1) == None):
+                cmds.setAttr(sel + ".jointOrientX", 0) 
+                cmds.setAttr(sel + ".jointOrientY", 0) 
+                cmds.setAttr(sel + ".jointOrientZ", 0)
+            else:
+                cmds.joint(sel, edit = 1, orientJoint = axisOrder, secondaryAxisOrient = secondaryAxisOrientation)
+
+
+
     def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint):
             
         if controlShape != "":
@@ -330,25 +420,32 @@ class Toolbox():
         else:
             cmds.warning("No control shape selected")
     
+    
     def ConstrainToJoint(self, thisJoint, thisControl):
         cmds.parentConstraint (thisControl, thisJoint)
     
+    
     def SetColor(self, index):
         self.colorIndex = index
+
 
     def SetJointColor(self, thisJoint, thisColor):
         cmds.setAttr (thisJoint + ".overrideEnabled", 1) 
         cmds.setAttr (thisJoint + ".overrideColor", thisColor) 
 
+
     def SetControlColor (self, thisControl, thisColor):
         cmds.setAttr (thisControl + ".overrideEnabled", 1)
         cmds.setAttr (thisControl + ".overrideColor", thisColor)
 
+
     def AddToTextScrollList(self, thisTSC):
         cmds.textScrollList(thisTSC, edit = 1, append = cmds.ls(selection = 1))
         
+        
     def QueryTextScrollList(self, thisTSC):
         return cmds.textScrollList(thisTSC, q = 1, si = 1)
+        
         
     def CreateIKFKJoints(self):
         sels = cmds.ls(selection = 1)

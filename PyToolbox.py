@@ -108,6 +108,9 @@ class Toolbox():
         
         #RK system tools
         self.rkFrame = cmds.frameLayout(parent = self.child2, label = "IKFK System", collapsable = True, collapse = True)
+        
+        cmds.button(parent = self.rkFrame, label = "Create IK FK Chains", command = lambda x: self.CreateIKFKJoints())
+        
         self.scrollList = cmds.textScrollList(parent = self.rkFrame)
         cmds.button(parent = self.rkFrame, label = "Add", command = lambda x: self.AddToTextScrollList(self.scrollList))
         cmds.button(parent = self.rkFrame, label = "Create Transform Control Attributes", command = lambda x: self.CreateIKFKAttributes(self.QueryTextScrollList(self.scrollList)), ann = "Select your Transform control to run this command. Will create an IKFK attribute for two arms and two legs")
@@ -115,7 +118,7 @@ class Toolbox():
         self.rkRC1 = cmds.rowColumnLayout(parent = self.rkFrame, numberOfColumns=2)
         cmds.text(parent = self.rkRC1, label = "Attribute Number", ann = "Check the order of the user-created attributes on Transform control to get this number")
         self.rkAttrNum1 = cmds.intField(parent = self.rkRC1, value = 1)
-        cmds.button(parent = self.rkFrame, label = "Key IKFK Switch", command = lambda x: self.RKConstraintSetDrivenKey(cmds.intField(self.rkAttrNum1, q = 1, v = 1)), ann  = "Select your Transform control first, then select the parent constraints on your RK joint chain for one joint system (ie for the left arm)")
+        cmds.button(parent = self.rkFrame, label = "Key IKFK Switch", command = lambda x: self.RKConstraintSetDrivenKey(self.QueryTextScrollList(self.scrollList), cmds.intField(self.rkAttrNum1, q = 1, v = 1)), ann  = "Select your Transform control first, then select the parent constraints on your RK joint chain for one joint system (ie for the left arm)")
 
         self.rkRC2 = cmds.rowColumnLayout(parent = self.rkFrame, numberOfColumns=2)
         cmds.text(parent = self.rkRC2, label = "Attribute Number", ann = "Check the order of the user-created attributes on Transform control to get this number")
@@ -206,7 +209,6 @@ class Toolbox():
     def CreateLocator(self, option):
         #get selection
         sels = cmds.ls(sl = 1)
-        print(option)
 
         if option == "Center of Objects":
             #duplicate selection, combine duplicates into one obj, query bounding box of new obj, and find center of bounding box
@@ -237,6 +239,7 @@ class Toolbox():
         
         #get selection
         sels = cmds.ls(sl = 1)
+        joints = []
 
         for var in range(0, len(sels)):
             #clear selection so maya doesn't throw a joint-related error
@@ -245,10 +248,6 @@ class Toolbox():
             #create joint, move to sels[var]
             joint = cmds.joint()
             cmds.matchTransform(joint, sels[var])
-            
-            #on first loop through, create a list
-            if var is 0:
-                joints = []
             
             #add current joint to list of joints
             joints.append(joint)
@@ -312,15 +311,11 @@ class Toolbox():
             else:
                 
                 if controlShape == "Circle":
-                
                     control = cmds.circle
                 
-    
                 elif controlShape == "Square":
-                
                     control = cmds.nurbsSquare()
-                
-    
+                    
                 elif controlShape == "Flower":
                         control = cmds.circle()
                         cmds.select (control[0] + ".cv[0]", control[0] + ".cv[2]", control[0] + ".cv[4]", control[0] + ".cv[6]", replace = 1)
@@ -342,12 +337,10 @@ class Toolbox():
         self.colorIndex = index
 
     def SetJointColor(self, thisJoint, thisColor):
-        print("setting joint color")
         cmds.setAttr (thisJoint + ".overrideEnabled", 1) 
         cmds.setAttr (thisJoint + ".overrideColor", thisColor) 
 
     def SetControlColor (self, thisControl, thisColor):
-        #print("setting control color")
         cmds.setAttr (thisControl + ".overrideEnabled", 1)
         cmds.setAttr (thisControl + ".overrideColor", thisColor)
 
@@ -357,29 +350,55 @@ class Toolbox():
     def QueryTextScrollList(self, thisTSC):
         return cmds.textScrollList(thisTSC, q = 1, si = 1)
         
+    def CreateIKFKJoints(self):
+        sels = cmds.ls(selection = 1)
+        
+        fkChain = cmds.duplicate(sels, renameChildren = 1)
+        ikChain = cmds.duplicate(sels, renameChildren = 1)
+        
+        nameOfIKHandle = ""
+        tokenizedSels = sels[0].split("_")
+        for var in range(0, len(tokenizedSels) - 2):
+            nameOfIKHandle += tokenizedSels[var] + "_"
+                
+        cmds.ikHandle(name = nameOfIKHandle + "IK_HNDL", startJoint = ikChain[0], endEffector = cmds.listRelatives(cmds.listRelatives(ikChain[0], children = 1)[0], children = 1)[0])
+        
+        for var in reversed(range(0, 3)):
+            currentRKJoint = sels[0]
+            currentFKJoint = fkChain[0]
+            currentIKJoint = ikChain[0]
+            
+            if var != 0:
+                for var2 in range(0, var):
+                    currentRKJoint = cmds.listRelatives(currentRKJoint, children = 1)[0]
+                    currentFKJoint = cmds.listRelatives(currentFKJoint, children = 1)[0]
+                    currentIKJoint = cmds.listRelatives(currentIKJoint, children = 1)[0]
+            cmds.parentConstraint(currentIKJoint, currentFKJoint, currentRKJoint)
+                
+            nameOfJoint = currentRKJoint
+            
+            cmds.rename(currentFKJoint, nameOfJoint.replace("RK", "FK"))
+            cmds.rename(currentIKJoint, nameOfJoint.replace("RK", "IK"))
+        
+        
     def CreateIKFKAttributes(self, xformCtrl):
-        #xformCtrl = cmds.ls(selection = 1)
-        print(xformCtrl)
     
         cmds.addAttr (xformCtrl, longName = "Arm_L_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
         cmds.addAttr (xformCtrl, longName = "Arm_R_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
         cmds.addAttr (xformCtrl, longName = "Leg_L_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
         cmds.addAttr (xformCtrl, longName = "Leg_R_IKFK", attributeType = "float", defaultValue = 0, minValue = 0, maxValue = 1, keyable = 1)
 
-    def RKConstraintSetDrivenKey(self, attrNum):
-        sels = cmds.ls(selection = 1)
 
-        xformCtrl = sels[0]
-        
-        sels.remove(xformCtrl)
+    def RKConstraintSetDrivenKey(self, xformCtrl, attrNum):
+        sels = cmds.ls(selection = 1)
 
         for var in range(0, len(sels)):
 
             constraint = sels[var]
 
             #get attributes
-            FKAttr = cmds.listAttr(constraint, userDefined = 1) [0]
-            IKAttr = cmds.listAttr(constraint, userDefined = 1) [1]
+            FKAttr = cmds.listAttr(constraint, userDefined = 1) [1]
+            IKAttr = cmds.listAttr(constraint, userDefined = 1) [0]
             ctrlAttr = cmds.listAttr(xformCtrl, userDefined = 1) [attrNum - 1]
 
             #set attributes to FK
@@ -402,11 +421,9 @@ class Toolbox():
 
             cmds.setAttr((xformCtrl + "." + ctrlAttr), 0)
 
+
     def RKCtrlSetDrivenKey(self, xformCtrl, attrNum, controlType):
         sels = cmds.ls(selection = 1)
-
-        #xformCtrl = sels[0]
-        #sels.remove(xformCtrl)
         
         for var in range(0, len(sels)):
             ctrl = sels[var]
@@ -507,9 +524,7 @@ class Toolbox():
                 parent = cmds.listRelatives(sel, parent = True) [0]
                 newSels.append(parent)
         cmds.select(newSels)
-
-
-
+        
 
     def RandomizeSelection (self, percentOfSel):
         

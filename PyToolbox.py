@@ -75,6 +75,14 @@ class Toolbox():
         cmds.button(parent = self.jointOrientFrame, label = "Freeze Rotations", command = lambda x: self.FreezeRotation())
         
         cmds.separator(parent = self.child2, style = "double")
+        
+        #ik solvers
+        self.ikSolversFrame = cmds.frameLayout(parent = self.child2, label = "IK Solvers", collapsable = True, collapse = True)
+        cmds.text(parent = self.ikSolversFrame, label = "Spline IK")
+        self.splineSelectHierarchyCB = cmds.checkBox(parent = self.ikSolversFrame, label = "Select Hierarchy")
+        cmds.button(parent = self.ikSolversFrame, label = "Create Spline IK", command = lambda x: self.SplineIK(cmds.checkBox(self.splineSelectHierarchyCB, query = 1, value = 1)))
+        
+        cmds.separator(parent = self.child2, style = "double")
 
         #control creator
         self.createControlFrame = cmds.frameLayout(parent = self.child2, label = "Create Controls", collapsable = True, collapse = True)
@@ -306,14 +314,11 @@ class Toolbox():
             secondaryAxisOrientation = "y"
         else:
             secondaryAxisOrientation = "z"
-            
-        sels = None
         
         if(selectHierarchy == 1):
             cmds.select(hierarchy = 1)
-            sels = cmds.ls(selection = 1)
-        else:
-            sels = cmds.ls(selection = 1)
+            
+        sels = cmds.ls(selection = 1)
             
         tertiaryAxis = None
         
@@ -334,10 +339,7 @@ class Toolbox():
         secondaryAxisOrientation += upOrDown
         
         axisOrder = primaryAxis + secondaryAxis + tertiaryAxis
-        
-        print(axisOrder)
-        print(secondaryAxisOrientation)
-        
+                
         for sel in sels:
             
             if(cmds.listRelatives(sel, children = 1) == None):
@@ -362,8 +364,7 @@ class Toolbox():
     
             if len(sels) != 0:
             
-                for var in range(0, len(sels)):
-                    print(controlShape)
+                for var in range(0, len(sels) - 1):
                     if controlShape == "Circle":
                         control = cmds.circle()
     
@@ -482,7 +483,22 @@ class Toolbox():
             
             cmds.rename(currentFKJoint, nameOfJoint.replace("RK", "FK"))
             cmds.rename(currentIKJoint, nameOfJoint.replace("RK", "IK"))
+            
+    def SplineIK(self, selectHierarchy):
         
+        
+        
+        if selectHierarchy:
+            cmds.select(hierarchy = 1)
+        sels = cmds.ls(selection = 1)
+        
+        curvePoints = list()
+        
+        for sel in sels:
+            curvePoints.append(cmds.xform(sel, query = 1, translation = 1, worldSpace = 1))
+            
+        spline = cmds.curve(editPoint = curvePoints)
+       
         
     def CreateIKFKAttributes(self, xformCtrl):
     
@@ -619,7 +635,6 @@ class Toolbox():
             cmds.select(hierarchy = True)
         
         sels = cmds.ls(sl = True)
-        print(sels)
         newSels = []
 
         for sel in sels:

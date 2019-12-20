@@ -485,19 +485,33 @@ class Toolbox():
             cmds.rename(currentIKJoint, nameOfJoint.replace("RK", "IK"))
             
     def SplineIK(self, selectHierarchy):
-        
-        
-        
+                                
         if selectHierarchy:
             cmds.select(hierarchy = 1)
         sels = cmds.ls(selection = 1)
         
+        lastJoint = ""
+        
+        for sel in sels:
+            if cmds.listRelatives(sel, children = 1) == None:
+                lastJoint = sel
+                        
         curvePoints = list()
         
         for sel in sels:
             curvePoints.append(cmds.xform(sel, query = 1, translation = 1, worldSpace = 1))
             
-        spline = cmds.curve(editPoint = curvePoints)
+        tokenizedSel = sels[0].split("_")
+            
+        spline = cmds.curve(editPoint = curvePoints, name = tokenizedSel[0] + "_spline_IK_CV")
+        ikHndl = cmds.ikHandle(startJoint = sels[0], endEffector = lastJoint, createCurve = 0, curve = spline, solver = "ikSplineSolver", name = tokenizedSel[0] + "_spline_IK_HNDL")
+
+        ctrlJointPositions = list()
+
+        for var in range(0, len(sels), 2):
+            ctrlJointPositions.append(cmds.xform(sels[var], query = 1, translation = 1, worldSpace = 1))
+            
+        print(ctrlJointPositions)
        
         
     def CreateIKFKAttributes(self, xformCtrl):

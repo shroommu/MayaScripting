@@ -510,9 +510,30 @@ class Toolbox():
 
         for var in range(0, len(sels), 2):
             ctrlJointPositions.append(cmds.xform(sels[var], query = 1, translation = 1, worldSpace = 1))
+        
+        if ctrlJointPositions[(len(sels)/2) - 1] != cmds.xform(lastJoint, query = 1, translation = 1, worldSpace = 1):
+            ctrlJointPositions.append(cmds.xform(lastJoint, query = 1, translation = 1, worldSpace = 1))
+        
+        firstCtrlJoint = None
+        lastCtrlJoint = None   
+        
+        cmds.select(clear = 1)     
+        
+        for var in range(0, len(ctrlJointPositions)):
+            currentJoint = cmds.joint(position = ctrlJointPositions[var], name = tokenizedSel[0] + "_spline_Ctrl_0" + str((var + 1)) + "_JNT")
             
-        print(ctrlJointPositions)
-       
+            if firstCtrlJoint == None:
+                firstCtrlJoint = currentJoint
+            lastCtrlJoint = currentJoint
+                
+        cmds.joint(firstCtrlJoint, edit = 1, orientJoint = "xzy", secondaryAxisOrient = "xup", children = 1)
+        
+        cmds.setAttr(lastCtrlJoint + ".jointOrientX", 0) 
+        cmds.setAttr(lastCtrlJoint + ".jointOrientY", 0) 
+        cmds.setAttr(lastCtrlJoint + ".jointOrientZ", 0)
+        
+        cmds.bindSkin(spline, firstCtrlJoint)
+        
         
     def CreateIKFKAttributes(self, xformCtrl):
     

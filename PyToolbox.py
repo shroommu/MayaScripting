@@ -360,11 +360,10 @@ class Toolbox():
 
 
     def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint, doRotate):
-        print(controlShape)
+
         if controlShape != "":
             sels = cmds.ls (selection = True)
             
-            print(len(sels))
             if len(sels) != 0:
             
                 for var in range(0, len(sels)):
@@ -398,8 +397,6 @@ class Toolbox():
                         nameOfControl = nameOfControl[0] + "_"
 
                     if colorJoint:    
-                        print(var)
-                        print(sels[var])
                         self.SetJointColor(sels[var], colorIndex)
 
                     self.SetControlColor(control[0], colorIndex)
@@ -409,6 +406,8 @@ class Toolbox():
                         
                     if doRotate == 1:
                         cmds.setAttr(control[0] + ".rotateY", 90)
+                        
+                    cmds.select(control)
                         
                     cmds.rename (str(control[0]), (nameOfControl + "CTRL"))
                     cmds.rename (controlGroup, (nameOfControl + "CTRL_GRP"))
@@ -431,6 +430,7 @@ class Toolbox():
     
                 self.SetControlColor(control[0], colorIndex)
                 cmds.group(control)
+                cmds.select(control)
             
         else:
             cmds.warning("No control shape selected")

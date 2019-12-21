@@ -129,7 +129,9 @@ class Toolbox():
         self.createControlCheckbox = cmds.checkBox(parent = self.createControlRC, value = False, label = "")
         cmds.text(parent = self.createControlRC, label = "Color Joints")
         self.colorJointsCheckbox = cmds.checkBox(parent = self.createControlRC, value = False, label = "")
-        cmds.button(parent = self.createControlFrame, label = "Create Controls", command = lambda x: self.CreateControl(cmds.optionMenu(self.createControlOptnMenu, q = True, v = True), self.colorIndex, cmds.checkBox(self.createControlCheckbox, q= True, v = True), cmds.checkBox(self.colorJointsCheckbox, q= True, v = True)))
+        cmds.text(parent = self.createControlRC, label = "Rotate 90 Y")
+        self.rotateYCheckbox = cmds.checkBox(parent = self.createControlRC, value = False, label = "")
+        cmds.button(parent = self.createControlFrame, label = "Create Controls", command = lambda x: self.CreateControl(cmds.optionMenu(self.createControlOptnMenu, q = True, v = True), self.colorIndex, cmds.checkBox(self.createControlCheckbox, q= True, v = True), cmds.checkBox(self.colorJointsCheckbox, q= True, v = True), cmds.checkBox(self.rotateYCheckbox, q= True, v = True)))
         cmds.text(parent = self.createControlRC, label = "Control Color:")
         
         cmds.separator(parent = self.child2, style = "double")
@@ -357,14 +359,15 @@ class Toolbox():
             cmds.makeIdentity(sel, rotate = 1, apply = 1)
 
 
-    def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint):
-            
+    def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint, doRotate):
+        print(controlShape)
         if controlShape != "":
             sels = cmds.ls (selection = True)
-    
+            
+            print(len(sels))
             if len(sels) != 0:
             
-                for var in range(0, len(sels) - 1):
+                for var in range(0, len(sels)):
                     if controlShape == "Circle":
                         control = cmds.circle()
     
@@ -387,20 +390,25 @@ class Toolbox():
                     nameOfControl = ""
     
                     if sizeOfTokenizedSel > 1:
-                        for var in range(0, (sizeOfTokenizedSel - 1)):
-                            nameOfControl += tokenizedSel[var] + "_"
+                        for var1 in range(0, (sizeOfTokenizedSel - 1)):
+                            nameOfControl += tokenizedSel[var1] + "_"
     
                     else:
                         nameOfControl = tokenizedSel
                         nameOfControl = nameOfControl[0] + "_"
 
                     if colorJoint:    
+                        print(var)
+                        print(sels[var])
                         self.SetJointColor(sels[var], colorIndex)
 
                     self.SetControlColor(control[0], colorIndex)
     
                     if doConstrain == 1:
                         self.ConstrainToJoint(sels[var], control)
+                        
+                    if doRotate == 1:
+                        cmds.setAttr(control[0] + ".rotateY", 90)
                         
                     cmds.rename (str(control[0]), (nameOfControl + "CTRL"))
                     cmds.rename (controlGroup, (nameOfControl + "CTRL_GRP"))
@@ -462,7 +470,7 @@ class Toolbox():
         
         nameOfIKHandle = ""
         tokenizedSels = sels[0].split("_")
-        for var in range(0, len(tokenizedSels) - 2):
+        for var in range(0, len(tokenizedSels) - 3):
             nameOfIKHandle += tokenizedSels[var] + "_"
                 
         cmds.ikHandle(name = nameOfIKHandle + "IK_HNDL", startJoint = ikChain[0], endEffector = cmds.listRelatives(cmds.listRelatives(ikChain[0], children = 1)[0], children = 1)[0])

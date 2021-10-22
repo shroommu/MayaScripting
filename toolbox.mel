@@ -1,0 +1,691 @@
+global int $colorIndex = 1;
+
+global proc string QueryOptionMenuValue(string $optionMenu)
+{
+    return `optionMenu -q -v $optionMenu`;
+}
+
+global proc int QueryRadioButtonGrp(string $radioGrp)
+{
+    return `radioButtonGrp -q -select $radioGrp`;
+}
+
+global proc int QueryCheckBox(string $checkBox)
+{
+    return `checkBox -q -v $checkBox`;
+}
+
+global proc string QueryTextFieldValue(string $textField)
+{
+    return `textField -q -text $textField`;
+}
+
+global proc int QueryIntFieldValue(string $intField)
+{
+    return `intField -q -v $intField`;
+}
+
+global proc CreateLocator(string $optionMenu)
+{
+    string $sels[] = `ls -sl`;
+    $option = QueryOptionMenuValue($optionMenu);
+
+    if ($option == "Center of Objects")
+    {
+        //duplicate selection, combine duplicates into one obj, query bounding box of new obj, and find center of bounding box
+        string $dups[] = `duplicate -rr $sels`;
+        $dups = `polyUnite -ch false $dups`;
+        float $bbox[] = `xform -boundingBox -query $dups`;
+
+        float $pivot[] = {($bbox[0] + $bbox[3])/2, ($bbox[1] + $bbox[4])/2, ($bbox[2] + $bbox[5])/2};
+
+        //clear history, delete duplicate obj
+        delete -ch $dups;
+        delete $dups;
+
+        //create locator, move to center of objs
+        $loc = `spaceLocator`;
+        xform -t $pivot[0] $pivot[1] $pivot[2] -ws $loc;
+    }
+
+    else if ($option == "Center of Components")
+    {
+        // //find the pivot of the obj, create a locator, move locator to pivot
+        float $bbox[] = `xform -boundingBox -query -ws $sels`;
+        float $pivot[] = {($bbox[0] + $bbox[3])/2, ($bbox[1] + $bbox[4])/2, ($bbox[2] + $bbox[5])/2};
+
+        // //create locator, move to center of objs
+        $loc = `spaceLocator`;
+        xform -translation $pivot[0] $pivot[1] $pivot[2] $loc;
+    }
+}
+
+global proc CreateJoints()
+{
+    string $sels[] = `ls -sl`;
+    string $joints[];
+
+    int $x;
+    for ($x = 0; $x < size($sels); $x++)
+    {
+        //clear selection so maya doesn't throw a joint-related error
+        select -clear;
+
+        $joint = `joint`;
+        matchTransform $joint $sels[$x];
+        
+        $joints[$x] = $joint;
+            
+        select -clear;
+        
+        if ($x != 0)
+        {
+            parent $joint $joints[$x - 1];
+        }
+    }
+}
+
+global proc OrientJoints(string $primaryAxisRadioGrp, string $secondaryAxisRadioGrp, string $secondaryAxisOrientationRadioGrp, string $upOrDownMenu, string $selectHierarchyCheckbox)
+{       
+    int $primaryAxis = `QueryRadioButtonGrp($primaryAxisRadioGrp)`;
+    int $secondaryAxis = `QueryRadioButtonGrp($secondaryAxisRadioGrp)`;
+    int $secondaryAxisOrientation = `QueryRadioButtonGrp($secondaryAxisOrientationRadioGrp)`;
+    string $upOrDown = `QueryOptionMenuValue($upOrDownMenu)`;
+    int $selectHierarchy = `QueryCheckBox($selectHierarchyCheckbox)`;
+
+    string $primaryAxisChar;
+    string $secondaryAxisChar;
+    string $secondaryAxisOrientationString;
+    string $upOrDownString;
+
+    if ($primaryAxis == 1)
+        $primaryAxisChar = "x";
+    else if ($primaryAxis == 2)
+        $primaryAxisChar = "y";
+    else
+        $primaryAxisChar = "z";
+        
+    if ($secondaryAxis == 1)
+        $secondaryAxisChar = "x";
+    else if ($secondaryAxis == 2)
+        $secondaryAxisChar = "y";
+    else
+        $secondaryAxisChar = "z";
+        
+    if ($secondaryAxisOrientation == 1)
+        $secondaryAxisOrientationString = "x";
+    else if ($secondaryAxisOrientation == 2)
+        $secondaryAxisOrientationString = "y";
+    else
+        $secondaryAxisOrientationString = "z";
+        
+    string $tertiaryAxis = "";
+    
+    if (($primaryAxisChar == "x" && $secondaryAxisChar == "y") || ($primaryAxisChar == "y" && $secondaryAxisChar == "x"))
+        $tertiaryAxis = "z";
+    else if (($primaryAxisChar == "x" && $secondaryAxisChar == "z") || ($primaryAxisChar == "z" && $secondaryAxisChar == "x"))
+        $tertiaryAxis = "y";
+    else if (($primaryAxisChar == "y" && $secondaryAxisChar == "z") || ($primaryAxisChar == "z" && $secondaryAxisChar == "y"))
+        $tertiaryAxis = "x";
+    else
+        warning("Primary and secondary axes are the same");
+        
+    if ($upOrDown == "+")
+        $upOrDownString = "up";
+    else
+        $upOrDownString = "down";
+        
+    $secondaryAxisOrientationString += $upOrDownString;
+    
+    string $axisOrder = $primaryAxisChar + $secondaryAxisChar + $tertiaryAxis;
+
+    if($selectHierarchy == 1)
+        select -hierarchy;
+        
+    string $sels[] = `ls -sl`;
+
+    for ($x = 0; $x < size($sels); $x++)
+    {
+        $sel = $sels[$x];
+        string $children[] = `listRelatives -children $sel`;
+
+        if(size($children) == 0)
+        {
+            setAttr ($sel + ".jointOrientX") 0;
+            setAttr ($sel + ".jointOrientY") 0; 
+            setAttr ($sel + ".jointOrientZ") 0;
+        }
+        else
+            joint -edit -orientJoint $axisOrder -secondaryAxisOrient $secondaryAxisOrientationString $sel;
+    }
+}
+
+global proc FreezeRotation()
+{
+    string $sels[] = `ls -sl`;
+    
+    for ($x = 0; $x < size($sels); $x++)
+    {
+        $sel = $sels[$x];
+        makeIdentity -rotate true -apply true $sel;
+    }
+}
+
+global proc SplineIK(string $selectHierarchyCheckbox, string $prefixField)
+{
+    int $selectHierarchy = `QueryCheckBox($selectHierarchyCheckbox)`;
+    string $prefix = `QueryTextFieldValue($prefixField)`;
+
+    if ($selectHierarchy)
+        select -hierarchy;
+    
+    string $sels[] = `ls -sl`;
+    
+    $lastJoint = "";
+    
+    for ($x = 0; $x < size($sels); $x++)
+    {
+        string $sel = $sels[$x];
+        string $children[] = `listRelatives -children $sel`;
+        if (size($children) == 0)
+            $lastJoint = $sel;
+    }
+                    
+    float $curvePoints[];
+    
+    for ($x = 0; $x < size($sels); $x++)
+    {
+        float $temp[] = `xform -query -translation -worldSpace $sels[$x]`;
+        $curvePoints[size($curvePoints)] = $temp[0];
+        $curvePoints[size($curvePoints)] = $temp[1];
+        $curvePoints[size($curvePoints)] = $temp[2];
+    }
+        
+    $spline = `curve -point $curvePoints[0] $curvePoints[1] $curvePoints[2] -name ($prefix + "_spline_IK_CV")`;
+
+    for ($x = 3; $x < size($curvePoints); $x += 3)
+    {
+        curve -a -p $curvePoints[$x] $curvePoints[$x + 1] $curvePoints[$x + 2] $spline;
+    }
+
+    $ikHndl = `ikHandle -startJoint $sels[0] -endEffector $lastJoint -createCurve false -curve $spline -solver "ikSplineSolver" -freezeJoints true -scv false -name ($prefix + "_spline_IK_HNDL")`;
+
+    float $ctrlJointPositions[];
+
+    for ($x = 0; $x < size($sels); $x += 3)
+    {
+        float $temp[] = `xform -query -translation -worldSpace $sels[$x]`;
+        $ctrlJointPositions[$x] = $temp[0];
+        $ctrlJointPositions[$x + 1] = $temp[1];
+        $ctrlJointPositions[$x + 2] = $temp[2];
+    }
+    
+    float $xformOfLastJoint[] = `xform -query -translation -worldSpace $lastJoint`;
+    float $xformOfLastCtrlJoint[] = {$ctrlJointPositions[size($ctrlJointPositions) - 3], $ctrlJointPositions[size($ctrlJointPositions) - 2], $ctrlJointPositions[size($ctrlJointPositions) - 1]};
+    if ($xformOfLastJoint[0] != $xformOfLastCtrlJoint[0] || $xformOfLastJoint[1] != $xformOfLastCtrlJoint[1] || $xformOfLastJoint[2] != $xformOfLastCtrlJoint[2])
+    {
+        float $temp[] = `xform -query -translation -worldSpace $lastJoint`;
+        $ctrlJointPositions[size($ctrlJointPositions)] = $temp[0];
+        $ctrlJointPositions[size($ctrlJointPositions)] = $temp[1];
+        $ctrlJointPositions[size($ctrlJointPositions)] = $temp[2];
+    }
+
+    string $firstCtrlJoint = "";
+    string $lastCtrlJoint = "";  
+    
+    select -clear;
+    
+    for ($x = 0; $x < size($ctrlJointPositions); $x += 3)
+    {
+        $currentJoint = `joint -position $ctrlJointPositions[$x] $ctrlJointPositions[$x + 1] $ctrlJointPositions[$x + 2] -name ($prefix + "_spline_Ctrl_0" + (string)(($x / 3) + 1) + "_JNT")`;
+        
+        if ($firstCtrlJoint == "")
+            $firstCtrlJoint = $currentJoint;
+        $lastCtrlJoint = $currentJoint;
+    }
+            
+    joint -edit -orientJoint "xzy" -secondaryAxisOrient "xup" -children $firstCtrlJoint;
+    
+    setAttr ($lastCtrlJoint + ".jointOrientX") 0; 
+    setAttr ($lastCtrlJoint + ".jointOrientY") 0;
+    setAttr ($lastCtrlJoint + ".jointOrientZ") 0;
+    
+    bindSkin $spline $firstCtrlJoint;
+}
+
+global proc SetColor(int $index)
+{
+    global int $colorIndex;
+    $colorIndex = $index;
+}
+
+proc SetJointColor(string $thisJoint)
+{
+    global int $colorIndex;
+    setAttr ($thisJoint + ".overrideEnabled") 1;
+    setAttr ($thisJoint + ".overrideColor") $colorIndex;
+}
+
+proc SetControlColor (string $thisControl)
+{
+    global int $colorIndex;
+    setAttr ($thisControl + ".overrideEnabled") 1;
+    setAttr ($thisControl + ".overrideColor") $colorIndex;
+}
+
+proc ConstrainToJoint(string $thisJoint, string $thisControl[])
+{
+    parentConstraint -mo $thisControl $thisJoint;
+}
+
+global proc CreateControl(string $controlShapeMenu, string $doConstrainCheckBox, string $colorJointCheckBox, string $doRotateCheckBox)
+{
+    string $controlShape = `QueryOptionMenuValue($controlShapeMenu)`;
+    int $doConstrain = `QueryCheckBox($doConstrainCheckBox)`;
+    int $colorJoint = `QueryCheckBox($colorJointCheckBox)`;
+    int $doRotate = `QueryCheckBox($doRotateCheckBox)`;
+
+    global int $colorIndex;
+    string $control[];
+
+    if ($controlShape != "")
+    {
+        string $sels[] = `ls -sl`;
+        
+        if (size($sels) != 0)
+        {
+            for ($x = 0; $x < size($sels); $x++)
+            {
+                $sel = $sels[$x];
+
+                if ($controlShape == "Circle")
+                    $control = `circle`;
+
+                else if ($controlShape == "Square")
+                {
+                    $control = `circle`;
+                    select -replace ($control[0] + ".cv[0]") ($control[0] + ".cv[2]") ($control[0] + ".cv[4]") ($control[0] + ".cv[6]");
+                    scale -relative 1 1 1;
+                    select $control;
+                    makeIdentity;
+                }
+
+                else if ($controlShape == "Flower")
+                {
+                    $control = `circle`;
+                    select -replace ($control[0] + ".cv[0]") ($control[0] + ".cv[2]") ($control[0] + ".cv[4]") ($control[0] + ".cv[6]");
+                    scale -relative -0.35 -0.35 -0.35;
+                    select $control;
+                    makeIdentity;
+                }
+
+                $controlGroup = `group $control`;
+                matchTransform $controlGroup $sel;
+
+                if ($colorJoint == 1)   
+                    SetJointColor($sel);
+
+                SetControlColor($control[0]);
+
+                if ($doRotate == 1)
+                    setAttr ($control[0] + ".rotateY") 90;
+                    select $control;
+                    makeIdentity -a true -r true;
+
+                if ($doConstrain == 1)
+                    ConstrainToJoint($sel, $control);
+                    
+                select -replace ($control[0] + ".cv[0]") ($control[0] + ".cv[2]") ($control[0] + ".cv[4]") ($control[0] + ".cv[6]") ($control[0] + ".cv[1]") ($control[0] + ".cv[3]") ($control[0] + ".cv[5]") ($control[0] + ".cv[7]");
+                    
+                string $tokenizedSel[];
+                int $sizeOfTokenizedSel = `tokenize $sel "_" $tokenizedSel`;
+                string $nameOfControl = "";
+
+                if ($sizeOfTokenizedSel > 1)
+                {
+                    for ($y = 0; $y < $sizeOfTokenizedSel; $y++)
+                    {
+                        $nameOfControl += $tokenizedSel[$y] + "_";
+                    }
+                }
+
+                else
+                {
+                    $nameOfControl = $tokenizedSel[0];
+                    $nameOfControl += "_";
+                }
+
+                rename $control[0] ($nameOfControl + "CTRL");
+                rename $controlGroup ($nameOfControl + "CTRL_GRP");
+            }
+        }
+    
+        else
+        {
+            
+            if ($controlShape == "Circle")
+                $control = `circle`;
+            
+            else if ($controlShape == "Square")
+            {
+                $control = `circle`;
+                select -replace ($control[0] + ".cv[0]") ($control[0] + ".cv[2]") ($control[0] + ".cv[4]") ($control[0] + ".cv[6]");
+                scale -relative 1 1 1;
+                select $control;
+                makeIdentity;
+            }
+                
+            else if ($controlShape == "Flower")
+            {
+                $control = `circle`;
+                select -replace ($control[0] + ".cv[0]") ($control[0] + ".cv[2]") ($control[0] + ".cv[4]") ($control[0] + ".cv[6]");
+                scale -relative -0.35 -0.35 -0.35;
+                select $control;
+                makeIdentity;
+            }
+            
+
+            SetControlColor ($control[0]);
+            group $control;
+            select $control;
+        }
+    }
+
+    else
+        warning("No control shape selected");
+}
+
+global proc LtScaleConstraint()
+{
+    string $sels[] = `ls -sl`;
+    connectAttr ($sels[0] + ".scale") ($sels[1] + ".scale");
+}
+
+global proc LtParentScaleConstraint()
+{
+    string $sels[] = `ls -sl`;
+    parentConstraint $sels[0] $sels[1];
+    connectAttr ($sels[0] + ".scale") ($sels[1] + ".scale");
+}
+
+global proc SplitParentConstrain()
+{
+    string $sels[] = `ls -sl`;
+    
+    string $constrainerCtrl = $sels[0];
+    string $constraineeCtrl = $sels[1];
+    string $constraineeCtrlGrp[] = `listRelatives -parent $constraineeCtrl`;
+    
+    string $tConst[] = `parentConstraint -name ($constraineeCtrlGrp[0] + "_Translate_Constraint") -skipRotate x -skipRotate y -skipRotate z -maintainOffset $constrainerCtrl $constraineeCtrlGrp[0]`;
+    string $rConst[] = `parentConstraint -name ($constraineeCtrlGrp[0] + "_Rotate_Constraint") -skipTranslate x -skipTranslate y -skipTranslate z -maintainOffset $constrainerCtrl $constraineeCtrlGrp[0]`;
+
+    addAttr -longName "Translate_Constraint" -k 1 -at long -minValue 0 -maxValue 1 -defaultValue 1 $constraineeCtrl;
+    addAttr -longName "Rotate_Constraint" -k 1 -at long -minValue 0 -maxValue 1 -defaultValue 1 $constraineeCtrl;
+
+    string $attrs[] = `listAttr -userDefined $constraineeCtrl`;
+
+    string $tAttr = $attrs[0];
+    string $rAttr = $attrs[1];
+    
+    connectAttr -f ($constraineeCtrl + "." + $rAttr) ($rConst[0] + "." + $constrainerCtrl + "W0");
+    connectAttr -f ($constraineeCtrl + "." + $tAttr) ($tConst[0] + "." + $constrainerCtrl + "W0");
+}
+
+global proc RenameAndNumber (string $nameField, string $numPadField, string $numField, string $suffixField, string $selectHierarchyCheckbox)
+{
+    string $name = `QueryTextFieldValue($nameField)`;
+    string $numPad = `QueryTextFieldValue($numPadField)`;
+    string $suffix = `QueryTextFieldValue($suffixField)`;
+    int $selectHierarchy = `QueryCheckBox($selectHierarchyCheckbox)`;
+
+    if($selectHierarchy == 1)
+        select -hierarchy;
+
+    string $sels[] = `ls -sl`;
+    int $newNumTemp = `QueryIntFieldValue($numField)`;
+    
+    for ($sel in $sels)
+    {
+        $newNumPad = "";
+        int $numPadDiff = size($numPad) - size((string)$newNumTemp);
+        
+        for ($x = 0; $x < $numPadDiff; $x++)
+        {
+            $newNumPad += "0";
+        }
+        
+        string $newNumPadTemp = $newNumPad + $newNumTemp;
+        rename $sel ($name + "_" + $newNumPadTemp + "_" + $suffix);
+        $newNumTemp++;
+    }
+}
+
+global proc ToolboxUI()
+{
+    $form = "form";
+
+    //main layout with tabs
+    $form = `formLayout`;
+    $tabs = `tabLayout -innerMarginWidth 5 -innerMarginHeight 5`;
+    formLayout -edit -attachForm $tabs "top" 0 -attachForm $tabs "left" 0 -attachForm $tabs "bottom" 0 -attachForm $tabs "right" 0 $form;
+    
+    //modelling tab
+    $child1 = `rowColumnLayout -parent $tabs -numberOfColumns 1`;
+
+    //duplicate and scatter
+    $dupScatFrame = `frameLayout -parent $child1 -label "Duplicate and Scatter" -collapsable true -collapse true`;
+    $dupScatRC = `rowColumnLayout -parent $dupScatFrame -numberOfColumns 3`;
+
+    text -parent $dupScatRC -label "X range";
+    $xMinField = `floatField -parent $dupScatRC -value -10`;
+    $xMaxField = `floatField -parent $dupScatRC -value 10`;
+    text -parent $dupScatRC -label "Y range";
+    $yMinField = `floatField -parent $dupScatRC -value -10`;
+    $yMaxField = `floatField -parent $dupScatRC -value 10`;
+    text -parent $dupScatRC -label "Z range";
+    $zMinField = `floatField -parent $dupScatRC -value -10`;
+    $zMaxField = `floatField -parent $dupScatRC -value 10`;
+    text -parent $dupScatRC -label "Number of Duplicates";
+    $dupNumField = `intField -parent $dupScatRC -value 10`;
+
+    $dupScatCol = `columnLayout -parent $dupScatFrame`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $dupScatFrame -label "Duplicate"; /* /*command = lambda : $DupAndScatterintField$dupNumField q = 1 v = 1; floatField$xMinField  q = 1 v = 1; floatField$xMaxField  q = 1 v = 1; floatField$yMinField  q = 1 v = 1; floatField$yMaxField  q = 1 v = 1; floatField$zMinField  q = 1 v = 1; floatField$zMaxField  q = 1 v = 1;;;*/
+
+    //rigging tab
+    $child2 = `rowColumnLayout -parent $tabs -numberOfColumns 1`;
+    
+    //locator creator
+    $createLocatorFrame = `frameLayout -parent $child2 -label "Create Locators" -collapsable true -collapse true`;
+    $createLocatorRC = `rowColumnLayout -parent $createLocatorFrame -numberOfColumns 2`;
+    text -parent $createLocatorRC -label "Type";
+    $createLocatorMenu = `optionMenu -parent $createLocatorRC`;
+    menuItem -parent $createLocatorMenu -label "Center of Objects";
+    menuItem -parent $createLocatorMenu -label "Center of Components";
+    iconTextButton -style "textOnly" -rpt 1 -parent $createLocatorFrame -label "Create Locator" -command ("CreateLocator(\"" + $createLocatorMenu + "\");");
+
+    separator -parent $child2 -style "double";
+
+    //joint creator
+    $createJointFrame = `frameLayout -parent $child2 -label "Create Joints" -collapsable true -collapse true`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $createJointFrame -label "Create Joints" -command ("CreateJoints();");
+
+    separator -parent $child2 -style "double";
+    
+    //joint orient
+    $jointOrientFrame = `frameLayout -parent $child2 -label "Orient Joints" -collapsable true -collapse true`;
+    
+    $primaryAxisRC = `radioButtonGrp -parent $jointOrientFrame -label "Primary Axis:" -ad3 1 -cw3 20 20 20 -labelArray3 "X" "Y" "Z" -numberOfRadioButtons 3 -select 1`;
+
+    $secondaryAxisRC = `radioButtonGrp -parent $jointOrientFrame -label "Secondary Axis:" -ad3 1 -cw3 20 20 20 -labelArray3 "X" "Y" "Z" -numberOfRadioButtons 3 -select 3`;
+
+    $SAORC = `radioButtonGrp -parent $jointOrientFrame -label "Secondary Axis World Orientation" -ad3 1 -cw3 20 20 20 -labelArray3 "X" "Y" "Z" -numberOfRadioButtons 3 -select 1`;
+    
+    $upOrDown = `optionMenu -parent $jointOrientFrame`;
+    menuItem -parent $upOrDown -label "+";
+    menuItem -parent $upOrDown -label "-";
+
+    $jointOrientSelectHierarchyCB = `checkBox -parent $jointOrientFrame -value true -label "Select Hierarchy"`;
+    
+    iconTextButton -style "textOnly" -rpt 1 -parent $jointOrientFrame -label "Orient Joints" -command ("OrientJoints(\"" + $primaryAxisRC + "\",\"" + $secondaryAxisRC + "\",\"" + $SAORC + "\",\"" + $upOrDown + "\",\"" + $jointOrientSelectHierarchyCB + "\");");
+    
+    iconTextButton -style "textOnly" -rpt 1 -parent $jointOrientFrame -label "Freeze Rotations" -command ("FreezeRotation();");
+    
+    separator -parent $child2 -style "double";
+    
+    //ik solvers
+    $ikSolversFrame = `frameLayout -parent $child2 -label "IK Solvers" -collapsable true -collapse true`;
+    text -parent $ikSolversFrame -label "Spline IK";
+    text -parent $ikSolversFrame -label "Prefix";
+    $splineIkNameField = `textField -parent $ikSolversFrame -text "prefix"`;
+    $splineSelectHierarchyCB = `checkBox -parent $ikSolversFrame -label "Select Hierarchy"`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $ikSolversFrame -label "Create Spline IK" -command ("SplineIK(\"" + $splineSelectHierarchyCB + "\",\"" + $splineIkNameField + "\");");
+    
+    separator -parent $child2 -style "double";
+
+    // control creator
+    $createControlFrame = `frameLayout -parent $child2 -label "Create Controls" -collapsable true -collapse true`;
+    $createControlRC = `rowColumnLayout -parent $createControlFrame -numberOfColumns 2`;
+    $createControlGrid = `gridLayout -parent $createControlFrame -numberOfColumns 8`;
+    button -label "" -parent $createControlGrid -backgroundColor 0 0 0 -command ("SetColor(1);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.75 0.75 0.75 -command ("SetColor(2);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.5 0.5 0.5 -command ("SetColor(3);");
+    button -label "" -parent $createControlGrid -backgroundColor .8 0 0.2 -command ("SetColor(4);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 0 .4 -command ("SetColor(5);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 0 1 -command ("SetColor(6);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 .3 0  -command ("SetColor(7);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.2 0 0.3 -command ("SetColor(8);");
+    button -label "" -parent $createControlGrid -backgroundColor .8 0 .8 -command ("SetColor(9);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.6 0.3 0.2 -command ("SetColor(10);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.25 0.13 0.13 -command ("SetColor(11);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.7 .2 0 -command ("SetColor(12);");
+    button -label "" -parent $createControlGrid -backgroundColor 1 0 0 -command ("SetColor(13);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 1 0 -command ("SetColor(14);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 0.3 0.6 -command ("SetColor(15);");
+    button -label "" -parent $createControlGrid -backgroundColor 1 1 1 -command ("SetColor(16);");
+    button -label "" -parent $createControlGrid -backgroundColor 1 1 0 -command ("SetColor(17);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 1 1 -command ("SetColor(18);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 1 .8 -command ("SetColor(19);");
+    button -label "" -parent $createControlGrid -backgroundColor 1 .7 .7 -command ("SetColor(20);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.9 .7 .5 -command ("SetColor(21);");
+    button -label "" -parent $createControlGrid -backgroundColor 1 1 0.4 -command ("SetColor(22);");
+    button -label "" -parent $createControlGrid -backgroundColor 0 0.7 .4 -command ("SetColor(23);");
+    button -label "" -parent $createControlGrid -backgroundColor .6 .4 .2 -command ("SetColor(24);");
+    button -label "" -parent $createControlGrid -backgroundColor .63 .63 .17 -command ("SetColor(25);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.4 0.6 0.2 -command ("SetColor(26);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.2 0.63 0.35 -command ("SetColor(27);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.18 0.63 0.63 -command ("SetColor(28);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.18 0.4 0.63 -command ("SetColor(29);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.43 0.18 0.63 -command ("SetColor(30);");
+    button -label "" -parent $createControlGrid -backgroundColor 0.63 0.18 0.4 -command ("SetColor(31);");
+    text -parent $createControlRC -label "Control Type";
+    $createControlOptnMenu = `optionMenu -parent $createControlRC`;
+    menuItem -parent $createControlOptnMenu -label "";
+    menuItem -parent $createControlOptnMenu -label "Circle";
+    menuItem -parent $createControlOptnMenu -label "Square";
+    menuItem -parent $createControlOptnMenu -label "Flower";
+    text -parent $createControlRC -label "Constrain to Joint";
+    $constrainControlCheckbox = `checkBox -parent $createControlRC -value false -label ""`;
+    text -parent $createControlRC -label "Color Joints";
+    $colorJointsCheckbox = `checkBox -parent $createControlRC -value false -label ""`;
+    text -parent $createControlRC -label "Rotate 90 Y";
+    $rotateYCheckbox = `checkBox -parent $createControlRC -value false -label ""`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $createControlFrame -label "Create Controls" -command ("CreateControl(\"" + $createControlOptnMenu + "\",\"" + $constrainControlCheckbox + "\",\"" + $colorJointsCheckbox + "\",\"" + $rotateYCheckbox + "\");");
+    text -parent $createControlRC -label "Control Color:";
+    
+    separator -parent $child2 -style "double";
+
+    //constraints
+    $constraintsFrame = `frameLayout -parent $child2 -label "Constraints" -collapsable true -collapse true`;
+
+    iconTextButton -style "textOnly" -rpt 1 -parent $constraintsFrame -label "LT Scale Constraint" -command ("LtScaleConstraint();");
+    iconTextButton -style "textOnly" -rpt 1 -parent $constraintsFrame -label "LT Parent-Scale Constraint" -command ("LtParentScaleConstraint();");
+    iconTextButton -style "textOnly" -rpt 1 -parent $constraintsFrame -label "Split Parent Constrain" -command ("SplitParentConstrain();");
+    
+    separator -parent $child2 -style "double";
+    
+    //RK system tools
+    $rkFrame = `frameLayout -parent $child2 -label "IKFK System" -collapsable true -collapse true`;
+    
+    iconTextButton -style "textOnly" -rpt 1 -parent $rkFrame -label "Create IK FK Chains" /*command lambda : $CreateIKFKJoints(*/;
+    
+    $scrollList = `textScrollList -parent $rkFrame`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $rkFrame -label "Add" /*command lambda : $AddToTextScrollList($scrollList*/;
+    iconTextButton -style "textOnly" -rpt 1 -parent $rkFrame -label "Create Transform Control Attributes" /*command lambda : $CreateIKFKAttributes($QueryTextScrollList($scrollList,*/ -ann "Select your Transform control to run this command. Will create an IKFK attribute for two arms and two legs";
+
+    $rkRC1 = `rowColumnLayout -parent $rkFrame -numberOfColumns 2`;
+    text -parent $rkRC1 -label "Attribute Number" -ann "Check the order of the user-created attributes on Transform control to get this number";
+    $rkAttrNum1 = `intField -parent $rkRC1 -value 1`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $rkFrame -label "Key IKFK Switch" /*command lambda : $RKConstraintSetDrivenKey($QueryTextScrollList($scrollList -intField($rkAttrNum1 -q 1 -v 1,*/ -ann "Select your Transform control first -then select the parent constraints on your RK joint chain for one joint system (ie for the left arm)";
+
+    $rkRC2 = `rowColumnLayout -parent $rkFrame -numberOfColumns 2`;
+    text -parent $rkRC2 -label "Attribute Number" -ann "Check the order of the user-created attributes on Transform control to get this number";
+    $rkAttrNum2 = `intField -parent $rkRC2 -value 1`;
+    text -parent $rkRC2 -label "Control Type";
+    $rkOptnMenu = `optionMenu -parent $rkRC2`;
+    menuItem -parent $rkOptnMenu -label "FK";
+    menuItem -parent $rkOptnMenu -label "IK";
+    iconTextButton -style "textOnly" -rpt 1 -parent $rkFrame -label "Key Control Visibility" /*command lambda : $RKCtrlSetDrivenKey($QueryTextScrollList($scrollList -intField($rkAttrNum2 -q 1 -v 1 -optionMenu($rkOptnMenu -q 1 -v 1*/  -ann "Select Transform control first -then select the controls for one joint system (ie the left arm IK controls)";
+    
+    separator -parent $child2 -style "double";
+
+    //skinning animator
+    $skinAnimFrame = `frameLayout -parent $child2 -label "Skinning Auto Animator" -collapsable true -collapse true`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $skinAnimFrame -label "Animate" /*command lambda : $SkinningAnim(*/;
+    iconTextButton -style "textOnly" -rpt 1 -parent $skinAnimFrame -label "Clear Keys" /*command lambda : cutKey(*/;
+
+    //utility tab
+    $child3 = `rowColumnLayout -parent $tabs -numberOfColumns 1`;
+
+    //renamer
+    $renamerFrame = `frameLayout -parent $child3 -label "Renamer" -collapsable true -collapse true`;
+    $renamerRC = `rowColumnLayout -parent $renamerFrame -numberOfColumns 2`;
+
+    text -parent $renamerRC -label "Name";
+    $nameField = `textField -parent $renamerRC -text "name"`;
+    text -parent $renamerRC -label "Number Padding";
+    $numPadField = `textField -parent $renamerRC -text "00"`;
+    text -parent $renamerRC -label "Number";
+    $numField = `intField -parent $renamerRC -value 1`;
+    text -parent $renamerRC -label "Suffix";
+    $suffixField = `textField -parent $renamerRC -text "suffix"`;
+    text -parent $renamerRC -label "Select Hierarchy";
+    $renamerSelectHierarchyCB = `checkBox -parent $renamerRC -value false -label ""`;
+
+    iconTextButton -style "textOnly" -rpt 1 -parent $renamerFrame -label "Rename and Number" -command ("RenameAndNumber(\"" + $nameField + "\",\"" + $numPadField + "\",\"" + $numField + "\",\"" + $suffixField + "\",\"" + $renamerSelectHierarchyCB + "\");");
+
+    //filter selection
+    $filselFrame = `frameLayout -parent $child3 -label "Filter Selection" -collapsable true -collapse true`;
+    $filselRC = `rowColumnLayout -parent $filselFrame -numberOfColumns 2`;
+    text -parent $filselRC -label "Select Hierarchy";
+    $filselCheckbox = `checkBox -parent $filselRC -value true -label ""`;
+    text -parent $filselRC -label "Node Type";
+    $filselText = `textField -parent $filselRC`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $filselFrame -label "Filter Selection"; /*command = lambda : $FilterSelection(checkBox($filselCheckbox, q = 1, v = 1;, textField($filselText, q = 1, text = 1;;;*/
+
+    //randomize selection
+    $randSelFrame = `frameLayout -parent $child3 -label "Randomize Selection" -collapsable true -collapse true`;
+    $randSelRC = `rowColumnLayout -parent $randSelFrame -numberOfColumns 2`;
+
+    text -parent $randSelRC -label "Percent of Selection";
+    $percentSelField = `floatField -parent $randSelRC -value 50`;
+    iconTextButton -style "textOnly" -rpt 1 -parent $randSelFrame -label "Randomize"; /*command = lambda : $RandomizeSelection(floatField($percentSelField, q = 1, v = 1;;)*/
+    
+    //set up tab layout
+    tabLayout -edit -tabLabel $child1 "Modelling" -tabLabel $child2 "Rigging" -tabLabel $child3 "Utility" $tabs;
+
+}
+
+global proc CreateWorkspace()
+{
+    $ws = "Custom Tools";
+    
+    if (`workspaceControl -exists $ws`)
+    {
+        deleteUI $ws;
+    }
+        
+    $ws = `workspaceControl -initialHeight 500 -initialWidth 200 -retain false -uiScript "ToolboxUI;" -floating true "Custom Tools"`;
+
+}
+
+CreateWorkspace();

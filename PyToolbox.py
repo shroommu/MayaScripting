@@ -135,7 +135,15 @@ class Toolbox():
         cmds.text(parent = self.createControlRC, label = "Control Color:")
         
         cmds.separator(parent = self.child2, style = "double")
+
+        # constraints
+        self.constraintsFrame = cmds.frameLayout(parent = self.child2, label = "Constraints", collapsable = True, collapse = True)
+
+        cmds.iconTextButton(style = "textOnly", rpt = 1, parent = self.constraintsFrame, label = "Parent-Scale Constraint", command = lambda : self.ParentScaleConstraint())
+        cmds.iconTextButton(style = "textOnly", rpt = 1, parent = self.constraintsFrame, label = "Split Parent Constrain", command = lambda : self.SplitParentConstrain())
         
+        cmds.separator(parent = self.child2, style = "double")
+
         #RK system tools
         self.rkFrame = cmds.frameLayout(parent = self.child2, label = "IKFK System", collapsable = True, collapse = True)
         
@@ -358,7 +366,7 @@ class Toolbox():
         for sel in sels:
             cmds.makeIdentity(sel, rotate = 1, apply = 1)
 
-    #NOTE: NurbsSquare command doesn't work anymore, find a new way to make a square control
+    # NOTE: NurbsSquare command doesn't work anymore, find a new way to make a square control
     def CreateControl(self, controlShape, colorIndex, doConstrain, colorJoint, doRotate):
 
         if controlShape != "":
@@ -449,10 +457,39 @@ class Toolbox():
         cmds.setAttr (thisJoint + ".overrideColor", thisColor) 
 
 
-    def SetControlColor (self, thisControl, thisColor):
+    def SetControlColor(self, thisControl, thisColor):
         cmds.setAttr (thisControl + ".overrideEnabled", 1)
         cmds.setAttr (thisControl + ".overrideColor", thisColor)
 
+    def ParentScaleConstraint(self):
+        sels = cmds.ls(sl=1)
+        cmds.parentConstraint(sels[0], sels[1])
+        cmds.scaleConstraint(sels[0], sels[1])
+
+    def SplitParentConstrain(self):
+        sels = cmds.ls(sl=1)
+    
+        constrainerCtrl = sels[0]
+        constraineeCtrl = sels[1]
+        constraineeCtrlGrp = cmds.listRelatives(constraineeCtrl, parent=1)
+
+        print(constrainerCtrl)
+        print(constraineeCtrl)
+        print(constraineeCtrlGrp)
+        
+        tConst = cmds.parentConstraint(constrainerCtrl, constraineeCtrlGrp[0], name =(constraineeCtrlGrp[0] + "_Translate_Constraint"), skipRotate = ['x','y','z'], maintainOffset = True)
+        rConst = cmds.parentConstraint(constrainerCtrl, constraineeCtrlGrp[0], name =(constraineeCtrlGrp[0] + "_Rotate_Constraint"), skipTranslate = ['x','y','z'], maintainOffset = True)
+
+        cmds.addAttr (constraineeCtrl, longName= "Translate_Constraint", k= 1, at = 'long', minValue = 0, maxValue = 1, defaultValue = 1)
+        cmds.addAttr (constraineeCtrl, longName= "Rotate_Constraint", k= 1, at = 'long', minValue = 0, maxValue = 1, defaultValue = 1)
+
+        attrs = cmds.listAttr(constraineeCtrl, userDefined=1)
+
+        tAttr = attrs[0]
+        rAttr = attrs[1]
+        
+        cmds.connectAttr((constraineeCtrl + "." + rAttr), (rConst[0] + "." + constrainerCtrl + "W0"), f=1)
+        cmds.connectAttr((constraineeCtrl + "." + tAttr), (tConst[0] + "." + constrainerCtrl + "W0"), f=1)
 
     def AddToTextScrollList(self, thisTSC):
         cmds.textScrollList(thisTSC, edit = 1, append = cmds.ls(selection = 1))
